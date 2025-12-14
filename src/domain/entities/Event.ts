@@ -43,6 +43,18 @@ export class Event {
   @Column()
   organizador_id: string;
 
+  @Column({ type: "int", default: 0 }) // 0 = sem limite
+  max_inscricoes: number;
+
+  @Column({ type: "int", default: 1 })
+  n_checkins_permitidos: number;
+
+  @Column({ nullable: true })
+  banner_url: string;
+
+  @Column({ default: false })
+  inscricao_aberta: boolean; // Controle manual do organizador
+
   @ManyToOne(() => User, (user) => user.eventos_organizados)
   @JoinColumn({ name: "organizador_id" })
   organizador: User;

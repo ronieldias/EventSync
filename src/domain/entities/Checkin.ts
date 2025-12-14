@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, CreateDateColumn, OneToOne, JoinColumn } from "typeorm";
+import { Entity, PrimaryGeneratedColumn, CreateDateColumn, ManyToOne, JoinColumn } from "typeorm";
 import { Registration } from "./Registration";
 
 @Entity("checkins")
@@ -6,7 +6,8 @@ export class Checkin {
   @PrimaryGeneratedColumn("uuid")
   id: string;
 
-  @OneToOne(() => Registration)
+  // Mudança de OneToOne para ManyToOne
+  @ManyToOne(() => Registration)
   @JoinColumn({ name: "inscricao_id" })
   inscricao: Registration;
 

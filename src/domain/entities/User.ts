@@ -31,6 +31,15 @@ export class User {
   })
   role: UserRole;
 
+  @Column({ nullable: true })
+  foto_url: string;
+
+  @Column({ type: "text", nullable: true })
+  bio: string;
+
+  @Column({ default: true })
+  visibilidade_participacao: boolean; // Se false, não aparece na lista de participantes
+
   @OneToMany(() => Event, (event) => event.organizador)
   eventos_organizados: Event[];
 
