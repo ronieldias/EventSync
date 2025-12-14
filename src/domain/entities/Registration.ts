@@ -5,7 +5,8 @@ import { Event } from "./Event";
 export enum RegistrationStatus {
   ATIVO = "ativo",
   REMOVIDO = "removido",
-  FINALIZADO = "finalizado", // Ex: Participou do evento
+  FINALIZADO = "finalizado",
+  CANCELADO = "cancelado", // Novo status
 }
 
 @Entity("registrations")
