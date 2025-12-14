@@ -1,0 +1,58 @@
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, OneToMany, JoinColumn } from "typeorm";
+import { User } from "./User";
+import { Registration } from "./Registration";
+
+export enum EventStatus {
+  RASCUNHO = "rascunho",
+  PUBLICADO = "publicado",
+  ENCERRADO = "encerrado",
+  CANCELADO = "cancelado",
+}
+
+@Entity("events")
+export class Event {
+  @PrimaryGeneratedColumn("uuid")
+  id: string;
+
+  @Column()
+  titulo: string;
+
+  @Column("text")
+  descricao: string;
+
+  @Column()
+  local: string;
+
+  @Column()
+  data_inicio: Date;
+
+  @Column()
+  data_fim: Date;
+
+  @Column({
+    type: "enum",
+    enum: EventStatus,
+    default: EventStatus.RASCUNHO,
+  })
+  status: EventStatus;
+
+  @Column()
+  carga_horaria: number; // Em horas
+
+  // Relacionamento com o Organizador
+  @Column()
+  organizador_id: string;
+
+  @ManyToOne(() => User, (user) => user.eventos_organizados)
+  @JoinColumn({ name: "organizador_id" })
+  organizador: User;
+
+  @OneToMany(() => Registration, (registration) => registration.evento)
+  inscricoes: Registration[];
+
+  @CreateDateColumn()
+  created_at: Date;
+
+  @UpdateDateColumn()
+  updated_at: Date;
+}
