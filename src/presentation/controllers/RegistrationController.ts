@@ -10,6 +10,7 @@ import { GetVirtualCardUseCase } from "../../application/usecases/GetVirtualCard
 import { CancelSubscriptionUseCase } from "../../application/usecases/CancelSubscriptionUseCase";
 import { GetCertificateDataUseCase } from "../../application/usecases/GetCertificateDataUseCase";
 import { ListUserRegistrationsUseCase } from "../../application/usecases/ListUserRegistrationsUseCase";
+import { ListEventRegistrationsUseCase } from "../../application/usecases/ListEventRegistrationsUseCase"; // [NOVO IMPORT]
 
 export class RegistrationController {
   async subscribe(req: Request, res: Response) {
@@ -86,7 +87,6 @@ export class RegistrationController {
     }
   }
 
-  // Novo Método
   async listMyRegistrations(req: Request, res: Response) {
     const userId = (req as AuthenticatedRequest).user!.id;
     const useCase = new ListUserRegistrationsUseCase(new TypeOrmRegistrationRepository());
@@ -94,6 +94,24 @@ export class RegistrationController {
     try {
       const result = await useCase.execute(userId);
       res.json(result);
+    } catch (error: any) {
+      res.status(400).json({ error: error.message });
+    }
+  }
+
+  // Listar inscritos do evento (Para o Organizador)
+  async listByEvent(req: Request, res: Response) {
+    const userId = (req as AuthenticatedRequest).user!.id;
+    const { id: eventId } = req.params;
+
+    const useCase = new ListEventRegistrationsUseCase(
+      new TypeOrmRegistrationRepository(),
+      new TypeOrmEventRepository()
+    );
+
+    try {
+      const list = await useCase.execute({ eventId, userId });
+      res.json(list);
     } catch (error: any) {
       res.status(400).json({ error: error.message });
     }

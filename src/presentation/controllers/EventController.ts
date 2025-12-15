@@ -7,6 +7,8 @@ import { ListEventsUseCase } from "../../application/usecases/ListEventsUseCase"
 import { PublishEventUseCase } from "../../application/usecases/PublishEventUseCase";
 import { UpdateEventUseCase } from "../../application/usecases/UpdateEventUseCase";
 import { ToggleInscriptionsUseCase } from "../../application/usecases/ToggleInscriptionsUseCase";
+import { ListOrganizerEventsUseCase } from "../../application/usecases/ListOrganizerEventsUseCase";
+import { GetEventByIdUseCase } from "../../application/usecases/GetEventByIdUseCase"; // [NOVO IMPORT]
 
 export class EventController {
   async create(req: Request, res: Response) {
@@ -27,7 +29,6 @@ export class EventController {
     const eventRepo = new TypeOrmEventRepository();
     const useCase = new ListEventsUseCase(eventRepo);
 
-    // Captura filtros da query string
     const filters = {
       nome: req.query.nome as string,
       categoria: req.query.categoria as string,
@@ -36,6 +37,19 @@ export class EventController {
 
     const events = await useCase.execute(filters);
     res.json(events);
+  }
+
+  // Obter um evento específico
+  async getOne(req: Request, res: Response) {
+    const { id } = req.params;
+    const useCase = new GetEventByIdUseCase(new TypeOrmEventRepository());
+
+    try {
+      const event = await useCase.execute(id);
+      res.json(event);
+    } catch (error: any) {
+      res.status(404).json({ error: error.message });
+    }
   }
 
   async publish(req: Request, res: Response) {
@@ -74,6 +88,18 @@ export class EventController {
     try {
       const result = await useCase.execute({ eventId: id, userId, status });
       res.json(result);
+    } catch (error: any) {
+      res.status(400).json({ error: error.message });
+    }
+  }
+
+  async listMine(req: Request, res: Response) {
+    const userId = (req as AuthenticatedRequest).user!.id;
+    const useCase = new ListOrganizerEventsUseCase(new TypeOrmEventRepository());
+
+    try {
+      const events = await useCase.execute(userId);
+      res.json(events);
     } catch (error: any) {
       res.status(400).json({ error: error.message });
     }

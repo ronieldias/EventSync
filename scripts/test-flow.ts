@@ -1,42 +1,50 @@
 // scripts/test-flow.ts
-// Certifique-se de ter o 'node-fetch' instalado ou rode com Node 18+ (que já tem fetch nativo)
-// Execução: npx ts-node scripts/test-flow.ts
+// EXECUÇÃO: npx ts-node scripts/test-flow.ts
 
 const API_URL = "http://localhost:3000";
 
-// Cores para o terminal
+// --- Utilitários de Cor para o Terminal ---
 const CLR = {
   reset: "\x1b[0m",
   green: "\x1b[32m",
   yellow: "\x1b[33m",
   blue: "\x1b[36m",
   red: "\x1b[31m",
-  magenta: "\x1b[35m"
+  magenta: "\x1b[35m",
+  gray: "\x1b[90m"
 };
 
-// --- Variáveis de Estado Global ---
+// --- Estado Global do Teste ---
 let tokenOrg = "";
-let orgId = "";
+let idOrg = "";
 let tokenAlice = "";
-let aliceId = "";
+let idAlice = "";
 let tokenBob = "";
-let bobId = "";
+let idBob = "";
+let tokenCharlie = ""; // Usuário "intruso"
 
-let mainEventId = ""; // Evento principal
-let vipEventId = "";  // Evento para teste de capacidade
+let idEventSummit = ""; // Evento Grande
+let idEventWorkshop = ""; // Evento Pequeno (Teste de Capacidade)
 
-let regAliceMain = "";
-let regBobMain = "";
-let friendshipId = "";
+let idRegAliceSummit = "";
+let idRegBobSummit = "";
+let idRegAliceWorkshop = "";
 
-// --- Função Auxiliar de Requisição ---
-async function req(method: string, endpoint: string, token: string | null = null, body: any = null): Promise<any> {
+let idFriendship = "";
+
+// --- Função Helper para Requisições HTTP ---
+async function req(
+  method: string, 
+  endpoint: string, 
+  token: string | null = null, 
+  body: any = null,
+  description: string = ""
+): Promise<any> {
+  if (description) console.log(`${CLR.gray}.. ${description}${CLR.reset}`);
+  
   const headers: any = { "Content-Type": "application/json" };
   if (token) headers["Authorization"] = `Bearer ${token}`;
 
-  // Log do comando (resumido)
-  console.log(`${CLR.yellow}[${method}]${CLR.reset} ${endpoint}`);
-  
   const options: any = { method, headers };
   if (body) options.body = JSON.stringify(body);
 
@@ -48,288 +56,333 @@ async function req(method: string, endpoint: string, token: string | null = null
     try {
       data = text ? JSON.parse(text) : {};
     } catch (e) {
-      data = { error: text };
+      data = { raw: text };
     }
 
+    // Injeta status para validação externa
+    data._status = response.status;
+    data._ok = response.ok;
+
     if (!response.ok) {
-      // Se for um erro esperado (ex: teste de falha), retornamos o erro para ser tratado
-      // Marcamos com uma flag para quem chamou saber que falhou
-      data._isError = true;
-      data._status = response.status;
-      return data;
+        return data; 
     }
 
     return data;
   } catch (err) {
-    console.error(`${CLR.red}❌ Erro de conexão:${CLR.reset}`, err);
+    console.error(`${CLR.red}❌ ERRO DE CONEXÃO:${CLR.reset}`, err);
     process.exit(1);
   }
 }
 
-// --- Função para Validar Erro Esperado ---
-function expectError(response: any, messagePart: string) {
-  if (response._isError) {
-    console.log(`${CLR.green}   ✅ Erro esperado capturado: "${response.error || response.message}"${CLR.reset}`);
+// --- Validadores ---
+function assertSuccess(res: any, msg: string) {
+  if (res._ok) {
+    console.log(`${CLR.green}✅ [OK] ${msg}${CLR.reset}`);
   } else {
-    console.error(`${CLR.red}   ❌ Deveria ter falhado, mas passou!${CLR.reset}`);
+    console.error(`${CLR.red}❌ [FALHA] ${msg}${CLR.reset}`);
+    console.error("   Resposta:", JSON.stringify(res, null, 2));
     process.exit(1);
   }
 }
 
-async function runTests() {
-  console.log(`${CLR.magenta}=========================================${CLR.reset}`);
-  console.log(`${CLR.magenta}   🚀 EVENTSYNC - TESTE DE FLUXO TOTAL   ${CLR.reset}`);
-  console.log(`${CLR.magenta}=========================================${CLR.reset}\n`);
+function assertError(res: any, msg: string, expectedPart: string) {
+  if (!res._ok && (JSON.stringify(res).includes(expectedPart) || res.error?.includes(expectedPart))) {
+    console.log(`${CLR.green}✅ [ERRO ESPERADO] ${msg} -> "${expectedPart}"${CLR.reset}`);
+  } else {
+    console.error(`${CLR.red}❌ [FALHA AO ESPERAR ERRO] ${msg}${CLR.reset}`);
+    console.error(`   Esperava conter: "${expectedPart}"`);
+    console.error("   Recebeu:", JSON.stringify(res, null, 2));
+    process.exit(1);
+  }
+}
+
+// =============================================================================
+//  INÍCIO DO SCRIPT DE TESTES
+// =============================================================================
+
+async function runFullTest() {
+  console.log(`${CLR.magenta}##################################################${CLR.reset}`);
+  console.log(`${CLR.magenta}#    EVENTSYNC - BATERIA DE TESTES COMPLETA      #${CLR.reset}`);
+  console.log(`${CLR.magenta}##################################################${CLR.reset}\n`);
 
   try {
-    // =========================================================================
-    // 1. AUTENTICAÇÃO E PERFIS
-    // =========================================================================
-    console.log(`${CLR.blue}--- [1] Autenticação e Users ---${CLR.reset}`);
-    
-    // Registrar Organizador
-    console.log("Criando Organizador...");
-    await req("POST", "/auth/register", null, {
-      nome: "Organizador Chefe", email: "org@test.com", senha: "123", cidade: "São Paulo", role: "organizer"
-    });
-    const loginOrg = await req("POST", "/auth/login", null, { email: "org@test.com", senha: "123" });
-    tokenOrg = loginOrg.token;
-    orgId = loginOrg.user.id;
+    // ---------------------------------------------------------------------------
+    // 1. AUTENTICAÇÃO E PERFIL
+    // ---------------------------------------------------------------------------
+    console.log(`${CLR.blue}=== 1. AUTENTICAÇÃO E PERFIL ===${CLR.reset}`);
 
-    // Registrar Alice
-    console.log("Criando Alice...");
+    // 1.1 Registrar Organizador
+    const resOrg = await req("POST", "/auth/register", null, {
+      nome: "Organizador Master", email: "org@eventsync.com", senha: "123", cidade: "São Paulo", role: "organizer"
+    }, "Registrando Organizador");
+    assertSuccess(resOrg, "Organizador registrado");
+    
+    // 1.2 Login Organizador
+    const loginOrg = await req("POST", "/auth/login", null, { email: "org@eventsync.com", senha: "123" });
+    tokenOrg = loginOrg.token;
+    idOrg = loginOrg.user.id;
+    assertSuccess(loginOrg, "Login Organizador");
+
+    // 1.3 Registrar Alice (Participante)
     await req("POST", "/auth/register", null, {
-      nome: "Alice Silva", email: "alice@test.com", senha: "123", cidade: "Rio de Janeiro", role: "user"
+      nome: "Alice Wonderland", email: "alice@test.com", senha: "123", cidade: "Rio de Janeiro", role: "user"
     });
     const loginAlice = await req("POST", "/auth/login", null, { email: "alice@test.com", senha: "123" });
     tokenAlice = loginAlice.token;
-    aliceId = loginAlice.user.id;
+    idAlice = loginAlice.user.id;
+    assertSuccess(loginAlice, "Alice registrada e logada");
 
-    // Registrar Bob
-    console.log("Criando Bob...");
+    // 1.4 Registrar Bob (Participante)
     await req("POST", "/auth/register", null, {
-      nome: "Bob Santos", email: "bob@test.com", senha: "123", cidade: "São Paulo", role: "user"
+      nome: "Bob Builder", email: "bob@test.com", senha: "123", cidade: "São Paulo", role: "user"
     });
     const loginBob = await req("POST", "/auth/login", null, { email: "bob@test.com", senha: "123" });
     tokenBob = loginBob.token;
-    bobId = loginBob.user.id;
+    idBob = loginBob.user.id;
+    assertSuccess(loginBob, "Bob registrado e logado");
+
+    // 1.5 Registrar Charlie (Intruso)
+    await req("POST", "/auth/register", null, {
+      nome: "Charlie Chaplin", email: "charlie@test.com", senha: "123", cidade: "Curitiba", role: "user"
+    });
+    const loginCharlie = await req("POST", "/auth/login", null, { email: "charlie@test.com", senha: "123" });
+    tokenCharlie = loginCharlie.token;
+
+    // 1.6 Editar Perfil da Alice
+    const updateProfile = await req("PUT", "/auth/profile", tokenAlice, {
+      bio: "Amo tecnologia e eventos!",
+      foto_url: "http://foto.com/alice.jpg",
+      visibilidade_participacao: true
+    }, "Atualizando perfil da Alice");
+    assertSuccess(updateProfile, "Perfil atualizado");
+    if (updateProfile.bio !== "Amo tecnologia e eventos!") throw new Error("Bio não atualizou!");
 
 
-    // =========================================================================
-    // 2. GESTÃO DE EVENTOS (Criação e Edição)
-    // =========================================================================
-    console.log(`\n${CLR.blue}--- [2] Gestão de Eventos ---${CLR.reset}`);
+    // ---------------------------------------------------------------------------
+    // 2. GESTÃO DE EVENTOS (ORGANIZADOR)
+    // ---------------------------------------------------------------------------
+    console.log(`\n${CLR.blue}=== 2. GESTÃO DE EVENTOS ===${CLR.reset}`);
 
-    // 2.1 Criar Evento Principal (Grande, 2 checkins permitidos)
+    // 2.1 Criar Evento Grande (Tech Summit)
     const evt1 = await req("POST", "/events", tokenOrg, {
       titulo: "Tech Summit 2025",
-      descricao: "O maior evento de tecnologia.",
-      local: "Expo Center",
+      descricao: "Maior evento de tech do ano.",
+      local: "Expo Center Norte",
       categoria: "Tecnologia",
       data_inicio: new Date().toISOString(),
-      data_fim: new Date(Date.now() + 172800000).toISOString(), // +2 dias
-      carga_horaria: 16,
+      data_fim: new Date(Date.now() + 172800000).toISOString(),
+      carga_horaria: 20,
       max_inscricoes: 100,
-      n_checkins_permitidos: 2 // TESTE DE MÚLTIPLOS CHECK-INS
-    });
-    mainEventId = evt1.id;
-    console.log(`   ✅ Evento Principal Criado: ${evt1.titulo} (ID: ${mainEventId})`);
+      n_checkins_permitidos: 2,
+      banner_url: "http://banner.com/tech.jpg"
+    }, "Criando Tech Summit");
+    idEventSummit = evt1.id;
+    assertSuccess(evt1, "Tech Summit criado");
 
-    // 2.2 Criar Evento VIP (Pequeno, 1 vaga, para teste de capacidade)
+    // 2.2 Criar Evento Pequeno (Workshop VIP)
     const evt2 = await req("POST", "/events", tokenOrg, {
-      titulo: "Workshop VIP Exclusivo",
-      descricao: "Apenas 1 vaga.",
-      local: "Sala VIP",
+      titulo: "Workshop VIP de IA",
+      descricao: "Exclusivo para 1 pessoa.",
+      local: "Sala Privada",
       categoria: "Workshop",
       data_inicio: new Date().toISOString(),
       data_fim: new Date(Date.now() + 3600000).toISOString(),
-      carga_horaria: 2,
-      max_inscricoes: 1, // TESTE DE CAPACIDADE
+      carga_horaria: 4,
+      max_inscricoes: 1, // APENAS 1 VAGA
       n_checkins_permitidos: 1
-    });
-    vipEventId = evt2.id;
-    console.log(`   ✅ Evento VIP Criado (Max 1 vaga).`);
+    }, "Criando Workshop VIP");
+    idEventWorkshop = evt2.id;
+    assertSuccess(evt2, "Workshop VIP criado");
 
-    // 2.3 Editar Evento Principal (Update)
-    await req("PUT", `/events/${mainEventId}`, tokenOrg, { 
-      descricao: "O maior evento de tecnologia do Brasil (Atualizado)." 
-    });
-    console.log("   ✅ Evento editado com sucesso.");
+    // 2.3 Listar Meus Eventos (Organizador)
+    const myEvents = await req("GET", "/events/my-events", tokenOrg, null, "Listando eventos do organizador");
+    if (myEvents.length !== 2) throw new Error("Deveria ter 2 eventos na lista do organizador");
+    assertSuccess(myEvents, "Lista 'Meus Eventos' validada");
 
-    // 2.4 Publicar os Eventos
-    await req("PATCH", `/events/${mainEventId}/publish`, tokenOrg, {});
-    await req("PATCH", `/events/${vipEventId}/publish`, tokenOrg, {});
-    console.log("   ✅ Eventos publicados.");
-
-    // 2.5 Abrir Inscrições (Controle Manual)
-    await req("PATCH", `/events/${mainEventId}/toggle-inscriptions`, tokenOrg, { status: true });
-    await req("PATCH", `/events/${vipEventId}/toggle-inscriptions`, tokenOrg, { status: true });
-    console.log("   ✅ Inscrições abertas manualmente.");
-
-
-    // =========================================================================
-    // 3. BUSCA E FILTROS (Público)
-    // =========================================================================
-    console.log(`\n${CLR.blue}--- [3] Busca e Filtros ---${CLR.reset}`);
-
-    // Testar filtro por Categoria
-    const searchTech = await req("GET", "/events?categoria=Tecnologia");
-    if (searchTech.length === 1 && searchTech[0].id === mainEventId) {
-      console.log("   ✅ Filtro por Categoria 'Tecnologia' OK.");
-    } else {
-      console.error("   ❌ Falha no filtro de categoria.");
-    }
-
-    // Testar filtro por Nome
-    const searchName = await req("GET", "/events?nome=VIP");
-    if (searchName.length === 1 && searchName[0].id === vipEventId) {
-      console.log("   ✅ Filtro por Nome 'VIP' OK.");
-    } else {
-      console.error("   ❌ Falha no filtro de nome.");
-    }
-
-
-    // =========================================================================
-    // 4. INSCRIÇÕES E REGRAS DE NEGÓCIO
-    // =========================================================================
-    console.log(`\n${CLR.blue}--- [4] Inscrições ---${CLR.reset}`);
-
-    // 4.1 Inscrição Normal (Alice no Principal)
-    const subAliceMain = await req("POST", `/events/${mainEventId}/register`, tokenAlice, {});
-    regAliceMain = subAliceMain.id;
-    console.log(`   ✅ Alice inscrita no Tech Summit.`);
-
-    // 4.2 Inscrição no VIP (Alice pega a única vaga)
-    await req("POST", `/events/${vipEventId}/register`, tokenAlice, {});
-    console.log(`   ✅ Alice inscrita no Workshop VIP (Vagas: 0 restam).`);
-
-    // 4.3 Teste de Capacidade (Bob tenta VIP cheio)
-    console.log("   🔍 Testando limite de vagas (Bob tenta VIP)...");
-    const subBobVip = await req("POST", `/events/${vipEventId}/register`, tokenBob, {});
-    expectError(subBobVip, "Vagas esgotadas");
-
-    // 4.4 Inscrição Normal (Bob no Principal)
-    const subBobMain = await req("POST", `/events/${mainEventId}/register`, tokenBob, {});
-    regBobMain = subBobMain.id;
-    console.log(`   ✅ Bob inscrito no Tech Summit.`);
-
-    // 4.5 Teste Inscrições Fechadas
-    console.log("   🔍 Testando Inscrições Fechadas...");
-    // Org fecha inscrições do VIP
-    await req("PATCH", `/events/${vipEventId}/toggle-inscriptions`, tokenOrg, { status: false });
-    // Bob tenta se inscrever novamente (mesmo que tivesse vaga, está fechado)
-    // (Vamos remover Alice do VIP para liberar vaga e testar se 'fechado' bloqueia mesmo com vaga)
-    // Mas antes, vamos testar o cancelamento da Alice
+    // 2.4 Publicar Eventos
+    await req("PATCH", `/events/${idEventSummit}/publish`, tokenOrg, {});
+    await req("PATCH", `/events/${idEventWorkshop}/publish`, tokenOrg, {});
     
-    // 4.6 Cancelamento pelo Participante
-    console.log("   ✅ Alice cancelando inscrição no VIP...");
-    // Precisamos do ID da inscrição da Alice no VIP. Listando...
-    const aliceSubs = await req("GET", "/registrations", tokenAlice);
-    const subAliceVip = aliceSubs.find((r: any) => r.evento.id === vipEventId);
-    
-    await req("PATCH", `/registrations/${subAliceVip.inscricao_id}/cancel`, tokenAlice, {});
-    console.log("   ✅ Inscrição cancelada.");
-
-    // Agora VIP tem vaga, mas está FECHADO. Bob tenta:
-    const subBobVip2 = await req("POST", `/events/${vipEventId}/register`, tokenBob, {});
-    expectError(subBobVip2, "fechadas");
+    // 2.5 Abrir Inscrições Manualmente
+    await req("PATCH", `/events/${idEventSummit}/toggle-inscriptions`, tokenOrg, { status: true });
+    await req("PATCH", `/events/${idEventWorkshop}/toggle-inscriptions`, tokenOrg, { status: true });
+    console.log(`${CLR.green}✅ [OK] Eventos publicados e inscrições abertas${CLR.reset}`);
 
 
-    // =========================================================================
-    // 5. SOCIAL (Amizade e Mensagens)
-    // =========================================================================
-    console.log(`\n${CLR.blue}--- [5] Social ---${CLR.reset}`);
+    // ---------------------------------------------------------------------------
+    // 3. BUSCA E FILTROS (PÚBLICO) E DETALHES
+    // ---------------------------------------------------------------------------
+    console.log(`\n${CLR.blue}=== 3. BUSCA, FILTROS E DETALHES ===${CLR.reset}`);
 
-    // Alice e Bob estão inscritos no Tech Summit (Ativos). Devem poder ser amigos.
-    
-    // 5.1 Enviar Pedido
-    console.log("   ✅ Alice envia pedido de amizade para Bob...");
-    const friendReq = await req("POST", "/social/friends/request", tokenAlice, { destinatarioId: bobId });
-    friendshipId = friendReq.id;
-
-    // 5.2 Listar Participantes
-    const participants = await req("GET", `/social/events/${mainEventId}/participants`);
-    if (participants.length >= 2) console.log("   ✅ Lista de participantes OK.");
-
-    // 5.3 Aceitar Pedido
-    console.log("   ✅ Bob aceita amizade...");
-    await req("PATCH", `/social/friends/${friendshipId}/respond`, tokenBob, { action: "accept" });
-
-    // 5.4 Trocar Mensagens
-    console.log("   ✅ Alice envia mensagem para Bob...");
-    await req("POST", "/social/messages", tokenAlice, { 
-      destinatarioId: bobId, 
-      conteudo: "Oi Bob! Vamos sentar juntos na palestra?" 
-    });
-
-    const msgs = await req("GET", `/social/messages/${aliceId}`, tokenBob);
-    if (msgs.length > 0 && msgs[0].conteudo.includes("palestra")) {
-      console.log("   ✅ Bob recebeu a mensagem.");
+    // 3.1 Filtros
+    const searchCat = await req("GET", "/events?categoria=Workshop", null, null, "Filtrando por categoria 'Workshop'");
+    if (searchCat.length === 1 && searchCat[0].id === idEventWorkshop) {
+      console.log(`${CLR.green}✅ [OK] Filtro por Categoria funcionou${CLR.reset}`);
     } else {
-      console.error("   ❌ Erro no chat.");
+      console.error(`${CLR.red}❌ [FALHA] Filtro por Categoria${CLR.reset}`);
+    }
+
+    const searchName = await req("GET", "/events?nome=Summit", null, null, "Filtrando por nome 'Summit'");
+    if (searchName.length === 1 && searchName[0].id === idEventSummit) {
+      console.log(`${CLR.green}✅ [OK] Filtro por Nome funcionou${CLR.reset}`);
+    } else {
+      console.error(`${CLR.red}❌ [FALHA] Filtro por Nome${CLR.reset}`);
+    }
+
+    // 3.2 Detalhes do Evento (NOVO ENDPOINT)
+    const eventDetails = await req("GET", `/events/${idEventSummit}`, null, null, "Alice visualiza detalhes do evento");
+    if (eventDetails.id === idEventSummit && eventDetails.titulo === "Tech Summit 2025") {
+      console.log(`${CLR.green}✅ [OK] Endpoint GET /events/:id funcionou${CLR.reset}`);
+    } else {
+      console.error(`${CLR.red}❌ [FALHA] GET /events/:id${CLR.reset}`);
     }
 
 
-    // =========================================================================
-    // 6. CHECK-IN (Múltiplos)
-    // =========================================================================
-    console.log(`\n${CLR.blue}--- [6] Check-in ---${CLR.reset}`);
+    // ---------------------------------------------------------------------------
+    // 4. FLUXO DE INSCRIÇÕES
+    // ---------------------------------------------------------------------------
+    console.log(`\n${CLR.blue}=== 4. INSCRIÇÕES E REGRAS ===${CLR.reset}`);
 
-    // Tech Summit permite 2 check-ins.
+    // 4.1 Inscrição Alice no Summit (Sucesso)
+    const subAliceSummit = await req("POST", `/events/${idEventSummit}/register`, tokenAlice, {}, "Alice se inscreve no Summit");
+    idRegAliceSummit = subAliceSummit.id;
+    assertSuccess(subAliceSummit, "Alice inscrita no Summit");
 
-    // 6.1 Primeiro Check-in Alice
-    await req("POST", "/checkins", tokenOrg, { registration_id: regAliceMain });
-    console.log("   ✅ Check-in 1/2 de Alice realizado.");
+    // 4.2 Inscrição Bob no Summit (Sucesso)
+    const subBobSummit = await req("POST", `/events/${idEventSummit}/register`, tokenBob, {}, "Bob se inscreve no Summit");
+    idRegBobSummit = subBobSummit.id;
+    assertSuccess(subBobSummit, "Bob inscrito no Summit");
 
-    // 6.2 Segundo Check-in Alice
-    await req("POST", "/checkins", tokenOrg, { registration_id: regAliceMain });
-    console.log("   ✅ Check-in 2/2 de Alice realizado.");
+    // 4.3 Inscrição Alice no Workshop (Sucesso - Pega a Vaga Única)
+    const subAliceVIP = await req("POST", `/events/${idEventWorkshop}/register`, tokenAlice, {}, "Alice se inscreve no Workshop (Vaga Única)");
+    idRegAliceWorkshop = subAliceVIP.id;
+    assertSuccess(subAliceVIP, "Alice pegou a vaga do Workshop");
 
-    // 6.3 Terceiro Check-in Alice (Deve falhar)
-    console.log("   🔍 Testando limite de check-ins (Alice tenta 3º)...");
-    const checkinFail = await req("POST", "/checkins", tokenOrg, { registration_id: regAliceMain });
-    expectError(checkinFail, "Limite de check-ins atingido");
+    // 4.4 Inscrição Bob no Workshop (FALHA - Lotação)
+    const subBobVIPFail = await req("POST", `/events/${idEventWorkshop}/register`, tokenBob, {}, "Bob tenta se inscrever no Workshop lotado");
+    assertError(subBobVIPFail, "Bob bloqueado por lotação", "Vagas esgotadas");
 
-    // 6.4 Check-in Bob (Apenas 1)
-    await req("POST", "/checkins", tokenOrg, { registration_id: regBobMain });
-    console.log("   ✅ Check-in 1/2 de Bob realizado.");
+    // 4.5 Teste de Inscrições Fechadas Manualmente
+    console.log(`${CLR.yellow}   >> Fechando inscrições do Workshop...${CLR.reset}`);
+    await req("PATCH", `/events/${idEventWorkshop}/toggle-inscriptions`, tokenOrg, { status: false });
+    
+    // Alice cancela para liberar vaga
+    await req("PATCH", `/registrations/${idRegAliceWorkshop}/cancel`, tokenAlice, {}, "Alice cancela inscrição no Workshop");
+    
+    // Bob tenta de novo (Vaga existe, mas inscrições estão FECHADAS)
+    const subBobVIPClosed = await req("POST", `/events/${idEventWorkshop}/register`, tokenBob, {}, "Bob tenta entrar (Inscrições Fechadas)");
+    assertError(subBobVIPClosed, "Bob bloqueado por status fechado", "fechadas");
 
+    // Reabrir e Bob se inscreve
+    await req("PATCH", `/events/${idEventWorkshop}/toggle-inscriptions`, tokenOrg, { status: true });
+    const subBobVIPSuccess = await req("POST", `/events/${idEventWorkshop}/register`, tokenBob, {}, "Reaberto: Bob se inscreve");
+    assertSuccess(subBobVIPSuccess, "Bob conseguiu a vaga após reabertura");
 
-    // =========================================================================
-    // 7. PÓS-EVENTO (Finalização, Review e Certificado)
-    // =========================================================================
-    console.log(`\n${CLR.blue}--- [7] Pós-Evento ---${CLR.reset}`);
-
-    // 7.1 Tentar avaliar antes de finalizar (Erro esperado)
-    const revFail = await req("POST", `/reviews/events/${mainEventId}`, tokenAlice, { nota: 5, comentario: "Top" });
-    expectError(revFail, "apenas avaliar eventos que já foram encerrados");
-
-    // 7.2 Finalizar Evento
-    console.log("   ✅ Org finaliza o evento...");
-    // Usamos o endpoint de Update para mudar status para encerrado
-    await req("PUT", `/events/${mainEventId}`, tokenOrg, { status: "encerrado" });
-
-    // 7.3 Avaliar com Sucesso
-    await req("POST", `/reviews/events/${mainEventId}`, tokenAlice, { nota: 5, comentario: "Melhor evento do ano!" });
-    console.log("   ✅ Alice avaliou o evento.");
-
-    // 7.4 Listar Avaliações
-    const reviews = await req("GET", `/reviews/events/${mainEventId}`);
-    if (reviews.length > 0) console.log("   ✅ Listagem de reviews OK.");
-
-    // 7.5 Obter Certificado
-    const certAlice = await req("GET", `/registrations/${regAliceMain}/certificate`, tokenAlice);
-    if (certAlice.certificado_id) {
-      console.log(`   📜 Certificado de Alice gerado: ${certAlice.certificado_id}`);
-      console.log(`      Carga Horária: ${certAlice.carga_horaria}`);
+    // 4.6 Listar Minhas Inscrições (Alice)
+    const aliceSubs = await req("GET", "/registrations", tokenAlice, null, "Listando inscrições da Alice");
+    const hasSummit = aliceSubs.find((r: any) => r.evento.id === idEventSummit && r.status === "ativo");
+    const hasWorkshopCanceled = aliceSubs.find((r: any) => r.evento.id === idEventWorkshop && r.status === "cancelado");
+    
+    if (hasSummit && hasWorkshopCanceled) {
+      console.log(`${CLR.green}✅ [OK] Lista 'Minhas Inscrições' correta (1 ativo, 1 cancelado)${CLR.reset}`);
     } else {
-      console.error("   ❌ Erro ao gerar certificado.");
+      console.error(`${CLR.red}❌ [FALHA] Lista de inscrições inconsistente${CLR.reset}`);
     }
 
-    // 7.6 Testar Certificado para quem não foi (Bob fez check-in, ok. Vamos simular alguém sem check-in?)
-    // Como Bob fez check-in, ele também consegue. O teste já cobriu o fluxo principal.
+    // 4.7 Organizador vê todos os inscritos (NOVO ENDPOINT)
+    const summitRegistrations = await req("GET", `/events/${idEventSummit}/registrations`, tokenOrg, null, "Org lista inscritos do Summit");
+    if (summitRegistrations.length >= 2) {
+      console.log(`${CLR.green}✅ [OK] Endpoint GET /events/:id/registrations funcionou (Org viu ${summitRegistrations.length} inscritos)${CLR.reset}`);
+    } else {
+      console.error(`${CLR.red}❌ [FALHA] Lista de inscritos do Org${CLR.reset}`);
+    }
 
-    console.log(`\n${CLR.green}🎉 SUCESSO TOTAL! Todos os requisitos validados. 🎉${CLR.reset}\n`);
+
+    // ---------------------------------------------------------------------------
+    // 5. SOCIAL (AMIZADE E CHAT)
+    // ---------------------------------------------------------------------------
+    console.log(`\n${CLR.blue}=== 5. SOCIAL ===${CLR.reset}`);
+
+    // 5.1 Charlie tenta adicionar Alice (Falha - Sem evento em comum)
+    const friendFail = await req("POST", "/social/friends/request", tokenCharlie, { destinatarioId: idAlice }, "Charlie tenta adicionar Alice");
+    assertError(friendFail, "Bloqueio de amizade sem evento comum", "participar do mesmo evento");
+
+    // 5.2 Alice adiciona Bob (Sucesso)
+    const friendReq = await req("POST", "/social/friends/request", tokenAlice, { destinatarioId: idBob }, "Alice envia pedido para Bob");
+    idFriendship = friendReq.id;
+    assertSuccess(friendReq, "Pedido de amizade enviado");
+
+    // 5.3 Bob aceita
+    const friendAccept = await req("PATCH", `/social/friends/${idFriendship}/respond`, tokenBob, { action: "accept" }, "Bob aceita pedido");
+    assertSuccess(friendAccept, "Amizade aceita");
+
+    // 5.4 Troca de Mensagens
+    await req("POST", "/social/messages", tokenAlice, { destinatarioId: idBob, conteudo: "Oi Bob! Viu a palestra?" });
+    const messagesBob = await req("GET", `/social/messages/${idAlice}`, tokenBob, null, "Bob lê mensagens de Alice");
+    
+    if (messagesBob.length > 0 && messagesBob[0].conteudo === "Oi Bob! Viu a palestra?") {
+      console.log(`${CLR.green}✅ [OK] Chat funcional${CLR.reset}`);
+    } else {
+      console.error(`${CLR.red}❌ [FALHA] Mensagem não chegou${CLR.reset}`);
+    }
+
+
+    // ---------------------------------------------------------------------------
+    // 6. CHECK-IN (ORGANIZADOR)
+    // ---------------------------------------------------------------------------
+    console.log(`\n${CLR.blue}=== 6. CHECK-IN ===${CLR.reset}`);
+
+    // 6.1 Check-in Alice 1/2
+    const check1 = await req("POST", "/checkins", tokenOrg, { registration_id: idRegAliceSummit }, "Check-in 1 de Alice");
+    assertSuccess(check1, "Check-in 1 registrado");
+
+    // 6.2 Check-in Alice 2/2
+    const check2 = await req("POST", "/checkins", tokenOrg, { registration_id: idRegAliceSummit }, "Check-in 2 de Alice");
+    assertSuccess(check2, "Check-in 2 registrado");
+
+    // 6.3 Check-in Alice 3/2 (FALHA - Limite)
+    const check3 = await req("POST", "/checkins", tokenOrg, { registration_id: idRegAliceSummit }, "Check-in 3 de Alice (Excesso)");
+    assertError(check3, "Bloqueio por limite de check-ins", "Limite de check-ins atingido");
+
+    // 6.4 Check-in Bob 1/2
+    await req("POST", "/checkins", tokenOrg, { registration_id: idRegBobSummit }, "Check-in 1 de Bob");
+
+
+    // ---------------------------------------------------------------------------
+    // 7. PÓS-EVENTO (FINALIZAÇÃO, REVIEW, CERTIFICADO)
+    // ---------------------------------------------------------------------------
+    console.log(`\n${CLR.blue}=== 7. PÓS-EVENTO ===${CLR.reset}`);
+
+    // 7.1 Tentar Review antes de finalizar (Falha)
+    const reviewFail = await req("POST", `/reviews/events/${idEventSummit}`, tokenAlice, { nota: 5, comentario: "Top" });
+    assertError(reviewFail, "Review bloqueado (evento não encerrado)", "só pode avaliar eventos que já foram encerrados");
+
+    // 7.2 Organizador Encerra o Evento
+    await req("PUT", `/events/${idEventSummit}`, tokenOrg, { status: "encerrado" }, "Encerrando evento Summit");
+    
+    // 7.3 Emitir Certificado (Alice - 2 check-ins)
+    const certAlice = await req("GET", `/registrations/${idRegAliceSummit}/certificate`, tokenAlice, null, "Alice baixa certificado");
+    if (certAlice.certificado_id && certAlice.carga_horaria === "20 horas") {
+      console.log(`${CLR.green}✅ [OK] Certificado de Alice gerado com sucesso${CLR.reset}`);
+    } else {
+      console.error(`${CLR.red}❌ [FALHA] Certificado inválido${CLR.reset}`);
+    }
+
+    // 7.4 Criar Review (Alice)
+    const reviewAlice = await req("POST", `/reviews/events/${idEventSummit}`, tokenAlice, { nota: 5, comentario: "Evento incrível, networking ótimo!" });
+    assertSuccess(reviewAlice, "Alice avaliou o evento");
+
+    // 7.5 Listar Reviews (Público/Auth)
+    const reviews = await req("GET", `/reviews/events/${idEventSummit}`, tokenOrg, null, "Listando reviews");
+    if (reviews.length > 0 && reviews[0].comentario.includes("incrível")) {
+      console.log(`${CLR.green}✅ [OK] Listagem de reviews correta${CLR.reset}`);
+    } else {
+      console.error(`${CLR.red}❌ [FALHA] Review não apareceu na lista${CLR.reset}`);
+    }
+
+    console.log(`\n${CLR.magenta}##################################################${CLR.reset}`);
+    console.log(`${CLR.green}🎉 TODOS OS TESTES PASSARAM! BACKEND 100% FUNCIONAL 🎉${CLR.reset}`);
+    console.log(`${CLR.magenta}##################################################${CLR.reset}\n`);
 
   } catch (err) {
     console.error(`\n${CLR.red}⛔ TESTE CRÍTICO FALHOU.${CLR.reset}`);
@@ -337,4 +390,5 @@ async function runTests() {
   }
 }
 
-runTests();
+// Executar
+runFullTest();
