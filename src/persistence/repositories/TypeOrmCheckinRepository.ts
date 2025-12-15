@@ -23,4 +23,11 @@ export class TypeOrmCheckinRepository implements ICheckinRepository {
       relations: ["inscricao"],
     });
   }
+
+  // Implementação da contagem
+  async countByRegistrationId(registrationId: string): Promise<number> {
+    return this.repository.count({
+      where: { inscricao: { id: registrationId } }
+    });
+  }
 }

@@ -27,10 +27,12 @@ export class PerformCheckinUseCase {
       throw new Error(`Check-in bloqueado. Status da inscrição: ${registration.status}`);
     }
 
-    // Verifica se já fez check-in
-    const alreadyCheckedIn = await this.checkinRepo.findByRegistrationId(registrationId);
-    if (alreadyCheckedIn) {
-      throw new Error("Check-in já realizado anteriormente.");
+    // Regra de Múltiplos Check-ins
+    const checkinsRealizados = await this.checkinRepo.countByRegistrationId(registrationId);
+    const limitePermitido = registration.evento.n_checkins_permitidos;
+
+    if (checkinsRealizados >= limitePermitido) {
+      throw new Error(`Limite de check-ins atingido para este participante (${checkinsRealizados}/${limitePermitido}).`);
     }
 
     return this.checkinRepo.create(registration);

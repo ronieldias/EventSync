@@ -23,6 +23,9 @@ export class Event {
   @Column()
   local: string;
 
+  @Column({ nullable: true })
+  categoria: string; 
+
   @Column()
   data_inicio: Date;
 
@@ -39,7 +42,6 @@ export class Event {
   @Column()
   carga_horaria: number; // Em horas
 
-  // Relacionamento com o Organizador
   @Column()
   organizador_id: string;
 

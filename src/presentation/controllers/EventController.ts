@@ -26,7 +26,15 @@ export class EventController {
   async list(req: Request, res: Response) {
     const eventRepo = new TypeOrmEventRepository();
     const useCase = new ListEventsUseCase(eventRepo);
-    const events = await useCase.execute();
+
+    // Captura filtros da query string
+    const filters = {
+      nome: req.query.nome as string,
+      categoria: req.query.categoria as string,
+      cidade: req.query.cidade as string
+    };
+
+    const events = await useCase.execute(filters);
     res.json(events);
   }
 
@@ -44,8 +52,6 @@ export class EventController {
     }
   }
 
-  // --- Novos Métodos ---
-
   async update(req: Request, res: Response) {
     const userId = (req as AuthenticatedRequest).user!.id;
     const { id } = req.params;
@@ -62,7 +68,7 @@ export class EventController {
   async toggleInscriptions(req: Request, res: Response) {
     const userId = (req as AuthenticatedRequest).user!.id;
     const { id } = req.params;
-    const { status } = req.body; // espera um boolean: true/false
+    const { status } = req.body; 
     const useCase = new ToggleInscriptionsUseCase(new TypeOrmEventRepository());
 
     try {

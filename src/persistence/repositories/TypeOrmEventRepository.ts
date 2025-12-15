@@ -22,8 +22,26 @@ export class TypeOrmEventRepository implements IEventRepository {
     return this.repository.find({ where: { organizador_id: organizerId } });
   }
 
-  async listPublicEvents(): Promise<Event[]> {
-    return this.repository.find({ where: { status: EventStatus.PUBLICADO } });
+  // Implementação dos filtros de busca
+  async listPublicEvents(filters?: { nome?: string; categoria?: string; cidade?: string }): Promise<Event[]> {
+    const query = this.repository.createQueryBuilder("event")
+      .where("event.status = :status", { status: EventStatus.PUBLICADO });
+
+    if (filters?.nome) {
+      // ILIKE é case-insensitive no Postgres
+      query.andWhere("event.titulo ILIKE :nome", { nome: `%${filters.nome}%` });
+    }
+    
+    if (filters?.categoria) {
+      query.andWhere("event.categoria ILIKE :cat", { cat: `%${filters.categoria}%` });
+    }
+    
+    if (filters?.cidade) {
+      // Busca simplificada no campo local
+      query.andWhere("event.local ILIKE :local", { local: `%${filters.cidade}%` });
+    }
+
+    return query.orderBy("event.data_inicio", "ASC").getMany();
   }
 
   async update(event: Event): Promise<Event> {
