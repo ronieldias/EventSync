@@ -1,72 +1,23 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, OneToMany, JoinColumn } from "typeorm";
-import { User } from "./User";
-import { Registration } from "./Registration";
+export type EventStatus = "draft" | "published" | "in_progress" | "finished" | "cancelled";
+export type EventCategory = "palestra" | "seminario" | "mesa_redonda" | "oficina" | "workshop" | "conferencia" | "outro" | "sem_categoria";
 
-export enum EventStatus {
-  RASCUNHO = "rascunho",
-  PUBLICADO = "publicado",
-  ENCERRADO = "encerrado",
-  CANCELADO = "cancelado",
-}
-
-@Entity("events")
-export class Event {
-  @PrimaryGeneratedColumn("uuid")
+export interface Event {
   id: string;
-
-  @Column()
-  titulo: string;
-
-  @Column("text")
-  descricao: string;
-
-  @Column()
-  local: string;
-
-  @Column({ nullable: true })
-  categoria: string; 
-
-  @Column()
-  data_inicio: Date;
-
-  @Column()
-  data_fim: Date;
-
-  @Column({
-    type: "enum",
-    enum: EventStatus,
-    default: EventStatus.RASCUNHO,
-  })
+  title: string;
+  description: string;
+  category: EventCategory;
+  banner?: string;
+  date: Date;
+  endDate?: Date;
+  location: string;
+  workload: number; // carga horária em horas
+  capacity: number;
   status: EventStatus;
-
-  @Column()
-  carga_horaria: number; // Em horas
-
-  @Column()
-  organizador_id: string;
-
-  @Column({ type: "int", default: 0 }) // 0 = sem limite
-  max_inscricoes: number;
-
-  @Column({ type: "int", default: 1 })
-  n_checkins_permitidos: number;
-
-  @Column({ nullable: true })
-  banner_url: string;
-
-  @Column({ default: false })
-  inscricao_aberta: boolean; // Controle manual do organizador
-
-  @ManyToOne(() => User, (user) => user.eventos_organizados)
-  @JoinColumn({ name: "organizador_id" })
-  organizador: User;
-
-  @OneToMany(() => Registration, (registration) => registration.evento)
-  inscricoes: Registration[];
-
-  @CreateDateColumn()
-  created_at: Date;
-
-  @UpdateDateColumn()
-  updated_at: Date;
+  subscriptionsOpen: boolean;
+  organizerId: string;
+  createdAt: Date;
+  updatedAt: Date;
 }
+
+export type CreateEventInput = Omit<Event, "id" | "status" | "subscriptionsOpen" | "createdAt" | "updatedAt">;
+export type UpdateEventInput = Partial<Omit<Event, "id" | "organizerId" | "createdAt" | "updatedAt">>;

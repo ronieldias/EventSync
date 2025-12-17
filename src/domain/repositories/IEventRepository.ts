@@ -1,10 +1,12 @@
-import { Event } from "../entities/Event";
+import { Event, CreateEventInput, UpdateEventInput, EventStatus } from "../entities/Event";
 
 export interface IEventRepository {
-  create(event: Event): Promise<Event>;
   findById(id: string): Promise<Event | null>;
-  listByOrganizer(organizerId: string): Promise<Event[]>;
-  // [ALTERADO] Adicionado parâmetro opcional filters
-  listPublicEvents(filters?: { nome?: string; categoria?: string; cidade?: string }): Promise<Event[]>;
-  update(event: Event): Promise<Event>;
+  findAll(): Promise<Event[]>;
+  findPublic(): Promise<Event[]>;
+  findByOrganizerId(organizerId: string): Promise<Event[]>;
+  findByStatus(status: EventStatus): Promise<Event[]>;
+  create(data: CreateEventInput): Promise<Event>;
+  update(id: string, data: UpdateEventInput): Promise<Event | null>;
+  delete(id: string): Promise<boolean>;
 }
