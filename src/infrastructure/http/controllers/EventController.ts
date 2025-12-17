@@ -304,9 +304,9 @@ export class EventController {
   }
 
   // Cancelar inscrição
-  // Participante só pode cancelar se:
-  // - Evento está publicado (não iniciado)
+  // Participante pode cancelar se:
   // - Inscrições estão abertas
+  // - Evento está publicado ou em andamento
   async unsubscribe(req: Request, res: Response): Promise<Response> {
     const { id: eventId } = req.params;
 
@@ -317,8 +317,8 @@ export class EventController {
       throw new AppError("Event not found", 404);
     }
 
-    if (event.status !== "published") {
-      throw new AppError("Não é possível cancelar inscrição de um evento que já foi iniciado", 400);
+    if (!["published", "in_progress"].includes(event.status)) {
+      throw new AppError("Não é possível cancelar inscrição de um evento finalizado ou cancelado", 400);
     }
 
     if (!event.subscriptionsOpen) {
